@@ -17,27 +17,31 @@ bool _isPassword = true;
 bool _isIP = true;
 bool _isPort = true;
 
-dynamic sock;
+dynamic _sock;
 
-List location = [];
-List prev = [];
+List _location = [];
+List _prev = [];
 
 Map _dirs = {};
 
-dynamic current = _dirs;
+dynamic _current = _dirs;
 dynamic _context;
+
+dynamic _screenWindow;
 
 //Network
 void refreshList() {
-  sock.write(FETCH + SEPARATOR + METADATA);
+  _sock.write(FETCH + SEPARATOR + METADATA);
 }
 
-void handler(List lis) async {
+void handler(List lis) {
   if (lis[0] == LOGIN) {
-    if (lis[1] == FALSE) _isUsername = false;
-    else if (lis.length > 1 && lis[2] == FALSE) _isPassword = false;
+    if (lis[1] == FALSE)
+      _isUsername = false;
+    else if (lis.length > 1 && lis[2] == FALSE)
+      _isPassword = false;
     else if (lis[1] == TRUE && lis[2] == TRUE) {
-      sock.write(FETCH + SEPARATOR + METADATA);
+      _sock.write(FETCH + SEPARATOR + METADATA);
       Navigator.pop(_context);
       Navigator.push(_context, MaterialPageRoute(builder: (builder) {
         return FilesDisplay();
@@ -45,25 +49,25 @@ void handler(List lis) async {
     } // NextPage
   } else if (lis[0] == METADATA) {
     _storage = lis[1];
-    try{
+    try {
       Map tem = json.decode(lis[2]);
       _dirs = tem[_username.toString()];
-      current = _dirs;
-      if (prev.isNotEmpty) {
-        for (int i = 0; i < prev.length; i) {
-          if (current.containsKey(location[i])) {
-            current = current[location[i]];
+      _current = _dirs;
+      if (_prev.isNotEmpty) {
+        for (int i = 0; i < _prev.length; i) {
+          if (_current.containsKey(_location[i])) {
+            _current = _current[_location[i]];
           } else {
             break;
           }
         }
       }
-    }
-    on FormatException {
+      print("MetaData");
+      _screenWindow.setState(() {});
+    } on FormatException {
       refreshList();
       print("Failed packet");
     }
-
   } else if (lis[0] == CREATE) {
     if (lis[1] == FOLDER) {
       ScaffoldMessenger.of(_context).showSnackBar(
@@ -72,6 +76,21 @@ void handler(List lis) async {
         ),
       );
     }
+  } else if (lis[0] == DELETE) {
+    if (lis[1] == FOLDER) {
+      ScaffoldMessenger.of(_context).showSnackBar(
+        SnackBar(
+          content: Text('Folder deleted'),
+        ),
+      );
+    } else if (lis[1] == FILE) {
+      ScaffoldMessenger.of(_context).showSnackBar(
+        SnackBar(
+          content: Text('File deleted'),
+        ),
+      );
+    }
+    _screenWindow.setState(() {});
   } else if (lis[0] == ERROR) {
     String temp = lis[1];
     ScaffoldMessenger.of(_context).showSnackBar(
@@ -79,7 +98,8 @@ void handler(List lis) async {
         content: Text(temp),
       ),
     );
-  }
+  } else if (lis[0] == UPLOAD) {
+  } else if (lis[0] == DOWNLOAD) {}
 }
 
 //Supporters
@@ -94,8 +114,8 @@ void reset() {
   _isIP = true;
   _isPort = true;
 
-  location = [];
-  prev = [];
+  _location = [];
+  _prev = [];
 
   _dirs = {};
 }
@@ -105,9 +125,9 @@ void fileName(context) {
   AlertDialog dialog = new AlertDialog(
     title: Center(
         child: Text(
-          "Create new file",
-          style: TextStyle(color: Colors.white),
-        )),
+      "Create new file",
+      style: TextStyle(color: Colors.white),
+    )),
     actionsPadding: EdgeInsets.all(0),
     contentPadding: EdgeInsets.all(0),
     backgroundColor: Color.fromARGB(255, 22, 22, 22),
@@ -121,16 +141,16 @@ void fileName(context) {
             errorText: !_isIP ? "Invalid IP" : null,
             border: OutlineInputBorder(
                 borderSide: BorderSide(
-                  color: Colors.white,
-                )),
+              color: Colors.white,
+            )),
             focusedBorder: OutlineInputBorder(
                 borderSide: BorderSide(
-                  color: Colors.white,
-                )),
+              color: Colors.white,
+            )),
             enabledBorder: OutlineInputBorder(
                 borderSide: BorderSide(
-                  color: Colors.white,
-                )),
+              color: Colors.white,
+            )),
             labelText: "File name",
             focusColor: Colors.white,
             labelStyle: TextStyle(color: Colors.white),
@@ -141,11 +161,11 @@ void fileName(context) {
     actions: [
       ElevatedButton(
           onPressed: () {
-            sock.write(CREATE +
+            _sock.write(CREATE +
                 SEPARATOR +
                 FOLDER +
                 SEPARATOR +
-                location.join("/") +
+                _location.join("/") +
                 "/" +
                 name.text);
             Navigator.of(context).pop();
@@ -161,21 +181,64 @@ void fileName(context) {
       });
 }
 
+void delete(context, name, type) {
+  AlertDialog dialog = new AlertDialog(
+    title: Center(
+        child: Text(
+      "Confirmation",
+      style: TextStyle(color: Colors.white),
+    )),
+    actionsPadding: EdgeInsets.all(0),
+    contentPadding: EdgeInsets.all(0),
+    backgroundColor: Color.fromARGB(255, 22, 22, 22),
+    content: Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Text(
+        'Do you want to delete "$name" ($type) ?',
+        style: TextStyle(color: Colors.white),
+      ),
+    ),
+    actions: [
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 20.0),
+        child: ElevatedButton(
+            onPressed: () {
+              _sock.write(DELETE +
+                  SEPARATOR +
+                  type +
+                  SEPARATOR +
+                  _location.join("/") +
+                  "/" +
+                  name);
+              Navigator.of(context).pop();
+              refreshList();
+            },
+            child: Text("Delete")),
+      )
+    ],
+  );
+  showDialog(
+      context: context,
+      builder: (context) {
+        return dialog;
+      });
+}
+
 void connect(ip, port) async {
   if (!_isConnected) {
-    sock = await Socket.connect(ip, port);
+    _sock = await Socket.connect(ip, port);
   }
-  print('Connected to: ${sock.remoteAddress.address}:${sock.remotePort}');
+  print('Connected to: ${_sock.remoteAddress.address}:${_sock.remotePort}');
   final login = LOGIN +
       SEPARATOR +
       _username.toString() +
       SEPARATOR +
       _password.toString();
-  sock.write(login);
+  _sock.write(login);
   if (!_isConnected) {
     var serverResponse = "";
     _isConnected = true;
-    sock.listen(
+    _sock.listen(
       (data) {
         serverResponse = String.fromCharCodes(data);
         print(serverResponse.length);
@@ -183,13 +246,13 @@ void connect(ip, port) async {
       },
       onDone: () {
         print('Server left.');
-        sock.destroy();
+        _sock.destroy();
       },
       // handle errors
       onError: (error) {
         print("Error raised");
         print(error);
-        sock.destroy();
+        _sock.destroy();
         reset();
         Navigator.pop(_context);
         Navigator.push(_context, MaterialPageRoute(builder: (builder) {
@@ -202,9 +265,7 @@ void connect(ip, port) async {
 
 //Core
 void main() {
-  runApp(MaterialApp(
-    home: Login(),
-  ));
+  runApp(MaterialApp(home: Login()));
 }
 
 //UI
@@ -227,6 +288,7 @@ class _LoginState extends State<Login> {
 
   @override
   Widget build(BuildContext context) {
+    _screenWindow = this;
     _context = context;
     return Scaffold(
       appBar: appBar(),
@@ -245,193 +307,187 @@ class _LoginState extends State<Login> {
 
   Card loginCard() {
     return Card(
-            shadowColor: Colors.white,
-            shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(25)),
-            elevation: 5,
-            color: Color.fromARGB(255, 22, 22, 22),
-            child: Container(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(30, 20, 30, 10),
-                    child: TextField(
-                      onTap: () {
-                        _isIP = true;
-                        setState(() {});
-                      },
-                      controller: _ipController,
-                      style: TextStyle(color: Colors.white),
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        errorText: !_isIP ? "Invalid IP" : null,
-                        border: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        labelText: "IP Address",
-                        focusColor: Colors.white,
-                        labelStyle: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30.0, vertical: 10),
-                    child: TextField(
-                      onTap: () {
-                        _isPort = true;
-                        setState(() {});
-                      },
-                      controller: _portController,
-                      style: TextStyle(color: Colors.white),
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        errorText: !_isPort ? "Invalid port" : null,
-                        border: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        labelText: "Port",
-                        focusColor: Colors.white,
-                        labelStyle: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30.0, vertical: 10),
-                    child: TextField(
-                      controller: _usernameController,
-                      onTap: () {
-                        _isUsername = true;
-                        setState(() {});
-                      },
-                      style: TextStyle(color: Colors.white),
-                      keyboardType: TextInputType.text,
-                      decoration: InputDecoration(
-                        errorText: !_isUsername ? "Invalid username" : null,
-                        border: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        labelText: "User Name",
-                        focusColor: Colors.white,
-                        labelStyle: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 30.0, vertical: 10),
-                    child: TextField(
-                      onTap: () {
-                        _isPassword = true;
-                        setState(() {});
-                      },
-                      controller: _passwordController,
-                      style: TextStyle(color: Colors.white),
-                      obscureText: _passVisibility,
-                      decoration: InputDecoration(
-                        errorText: !_isPassword ? "Invalid password" : null,
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            (_passVisibility)
-                                ? Icons.visibility
-                                : Icons.visibility_off,
-                            color: Colors.white,
-                          ),
-                          onPressed: () {
-                            setState(() {
-                              _passVisibility = !_passVisibility;
-                            });
-                          },
-                        ),
-                        border: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        focusedBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        enabledBorder: OutlineInputBorder(
-                            borderSide: BorderSide(
-                          color: Colors.white,
-                        )),
-                        labelText: "Password",
-                        focusColor: Colors.white,
-                        labelStyle: TextStyle(color: Colors.white),
-                      ),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(10.0),
-                    child: ElevatedButton(
-                        onPressed: () {
-                          if (!_ipRegex.hasMatch(_ipController.text)) {
-                            _isIP = false;
-                            setState(() {});
-                          } else {
-                            _isIP = true;
-                            setState(() {});
-                          }
-                          if (_portController.text.toString() == "" ||
-                              int.parse(_portController.text.toString()) <
-                                  0 ||
-                              int.parse(_portController.text.toString()) >
-                                  65353) {
-                            _isPort = false;
-                            setState(() {});
-                          } else {
-                            _isPort = true;
-                            setState(() {});
-                          }
-                          _username = sha512
-                              .convert(utf8.encode(_usernameController.text));
-                          _password = sha512
-                              .convert(utf8.encode(_passwordController.text));
-                          if (_isPassword &&
-                              _isPort &&
-                              _isUsername &&
-                              _isIP) {
-                            connect(_ipController.text.toString(),
-                                int.parse(_portController.text.toString()));
-                            setState(() {});
-                          }
-                        },
-                        child: Text("Take me in")),
-                  )
-                ],
+      shadowColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
+      elevation: 5,
+      color: Color.fromARGB(255, 22, 22, 22),
+      child: Container(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(30, 20, 30, 10),
+              child: TextField(
+                onTap: () {
+                  _isIP = true;
+                  setState(() {});
+                },
+                controller: _ipController,
+                style: TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  errorText: !_isIP ? "Invalid IP" : null,
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  labelText: "IP Address",
+                  focusColor: Colors.white,
+                  labelStyle: TextStyle(color: Colors.white),
+                ),
               ),
             ),
-          );
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 30.0, vertical: 10),
+              child: TextField(
+                onTap: () {
+                  _isPort = true;
+                  setState(() {});
+                },
+                controller: _portController,
+                style: TextStyle(color: Colors.white),
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  errorText: !_isPort ? "Invalid port" : null,
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  labelText: "Port",
+                  focusColor: Colors.white,
+                  labelStyle: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 30.0, vertical: 10),
+              child: TextField(
+                controller: _usernameController,
+                onTap: () {
+                  _isUsername = true;
+                  setState(() {});
+                },
+                style: TextStyle(color: Colors.white),
+                keyboardType: TextInputType.text,
+                decoration: InputDecoration(
+                  errorText: !_isUsername ? "Invalid username" : null,
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  labelText: "User Name",
+                  focusColor: Colors.white,
+                  labelStyle: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+            Padding(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 30.0, vertical: 10),
+              child: TextField(
+                onTap: () {
+                  _isPassword = true;
+                  setState(() {});
+                },
+                controller: _passwordController,
+                style: TextStyle(color: Colors.white),
+                obscureText: _passVisibility,
+                decoration: InputDecoration(
+                  errorText: !_isPassword ? "Invalid password" : null,
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      (_passVisibility)
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: Colors.white,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _passVisibility = !_passVisibility;
+                      });
+                    },
+                  ),
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: Colors.white,
+                  )),
+                  labelText: "Password",
+                  focusColor: Colors.white,
+                  labelStyle: TextStyle(color: Colors.white),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(10.0),
+              child: ElevatedButton(
+                  onPressed: () {
+                    if (!_ipRegex.hasMatch(_ipController.text)) {
+                      _isIP = false;
+                      setState(() {});
+                    } else {
+                      _isIP = true;
+                      setState(() {});
+                    }
+                    if (_portController.text.toString() == "" ||
+                        int.parse(_portController.text.toString()) < 0 ||
+                        int.parse(_portController.text.toString()) > 65353) {
+                      _isPort = false;
+                      setState(() {});
+                    } else {
+                      _isPort = true;
+                      setState(() {});
+                    }
+                    _username =
+                        sha512.convert(utf8.encode(_usernameController.text));
+                    _password =
+                        sha512.convert(utf8.encode(_passwordController.text));
+                    if (_isPassword && _isPort && _isUsername && _isIP) {
+                      connect(_ipController.text.toString(),
+                          int.parse(_portController.text.toString()));
+                      setState(() {});
+                    }
+                  },
+                  child: Text("Take me in")),
+            )
+          ],
+        ),
+      ),
+    );
   }
 
   AppBar appBar() {
@@ -456,8 +512,9 @@ class _FilesDisplayState extends State<FilesDisplay> {
 
   @override
   Widget build(BuildContext context) {
+    _screenWindow = this;
     _context = context;
-    lis = current.keys.toList();
+    lis = _current.keys.toList();
     lis.remove("*");
     return Scaffold(
         appBar: appBar(context),
@@ -469,16 +526,14 @@ class _FilesDisplayState extends State<FilesDisplay> {
               return Future.delayed(
                 Duration(seconds: 1),
                 () {
-                  lis = current.keys.toList();
+                  lis = _current.keys.toList();
                   setState(() {});
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text('Page Refreshed'),
                     ),
                   );
-                  setState(() {
-
-                  });
+                  setState(() {});
                 },
               );
             },
@@ -494,81 +549,84 @@ class _FilesDisplayState extends State<FilesDisplay> {
 
   GestureDetector listViewTile(int index) {
     return GestureDetector(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(5.0, 2, 5, 0),
-                  child: Card(
-                    color: Color.fromARGB(255, 22, 22, 22),
-                    child: ListTile(
-                      title: Text(
-                        lis[index],
-                        maxLines: 1,
-                        style: TextStyle(
-                          color: Colors.white,
-                        ),
-                      ),
-                      contentPadding: EdgeInsets.all(5),
-                      leading: (current[lis[index]].values.length == 0)
-                          ? Icon(
-                              Icons.insert_drive_file_outlined,
-                              color: Colors.white,
-                            )
-                          : Icon(
-                              Icons.folder_open_rounded,
-                              color: Colors.white,
-                            ),
-                    ),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(5.0, 2, 5, 0),
+        child: Card(
+          color: Color.fromARGB(255, 22, 22, 22),
+          child: ListTile(
+            title: Text(
+              lis[index],
+              maxLines: 1,
+              style: TextStyle(
+                color: Colors.white,
+              ),
+            ),
+            contentPadding: EdgeInsets.all(5),
+            leading: (_current[lis[index]].values.length == 0)
+                ? Icon(
+                    Icons.insert_drive_file_outlined,
+                    color: Colors.white,
+                  )
+                : Icon(
+                    Icons.folder_open_rounded,
+                    color: Colors.white,
                   ),
-                ),
-                onTap: () {
-                  if (current[lis[index]].values.length != 0) {
-                    prev.add(current);
-                    location.add(lis[index]);
-                    current = current[lis[index]];
-                    setState(() {});
-                  }
-                },
-              );
+          ),
+        ),
+      ),
+      onTap: () {
+        if (_current[lis[index]].values.length != 0) {
+          _prev.add(_current);
+          _location.add(lis[index]);
+          _current = _current[lis[index]];
+          setState(() {});
+        }
+      },
+      onLongPress: () {
+        delete(context, lis[index],
+            (_current[lis[index]].values.length != 0) ? FOLDER : FILE);
+      },
+    );
   }
 
   AppBar appBar(BuildContext context) {
     return AppBar(
-        title: Text("Local FTP"),
-        backgroundColor: Color.fromARGB(255, 22, 22, 22),
-        shadowColor: Colors.white,
-        actions: [
-          IconButton(
-              onPressed: () {
-                fileName(context);
-                refreshList();
-              },
-              icon: Icon(Icons.add)),
-          IconButton(
-              onPressed: () {
-                sock.close();
-                _isConnected = false;
-                reset();
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (context) {
-                  return Login();
-                }));
-              },
-              icon: Icon(Icons.logout)),
-        ],
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_rounded),
-          onPressed: () {
-            if (prev.isNotEmpty) {
-              current = prev.removeLast();
-              location.removeLast();
-              setState(() {});
-            }
-          },
-        ),
-        elevation: 5,
-      );
+      title: Text("Local FTP"),
+      backgroundColor: Color.fromARGB(255, 22, 22, 22),
+      shadowColor: Colors.white,
+      actions: [
+        IconButton(
+            onPressed: () {
+              fileName(context);
+              refreshList();
+            },
+            icon: Icon(Icons.add)),
+        IconButton(
+            onPressed: () {
+              _sock.close();
+              _isConnected = false;
+              reset();
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (context) {
+                return Login();
+              }));
+            },
+            icon: Icon(Icons.logout)),
+      ],
+      leading: IconButton(
+        icon: Icon(Icons.arrow_back_rounded),
+        onPressed: () {
+          if (_prev.isNotEmpty) {
+            _current = _prev.removeLast();
+            _location.removeLast();
+            setState(() {});
+          }
+        },
+      ),
+      elevation: 5,
+    );
   }
 }
-
 
 //192.168.1.22
 //24680
