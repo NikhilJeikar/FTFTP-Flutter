@@ -1,15 +1,19 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:core';
 import 'dart:io';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
+import 'package:ftp/Constants.dart';
 import 'Network.dart';
 
 dynamic _username = "";
 dynamic _password = "";
 dynamic _storage = "";
+
+dynamic _realName = "";
 
 bool _isConnected = false;
 bool _isUsername = true;
@@ -28,6 +32,8 @@ dynamic _current = _dirs;
 dynamic _context;
 
 dynamic _screenWindow;
+
+double _used = 0;
 
 //Network
 void refreshList() {
@@ -48,9 +54,12 @@ void handler(List lis) {
       }));
     } // NextPage
   } else if (lis[0] == METADATA) {
-    _storage = lis[1];
+    _storage = double.parse(lis[1].toString());
+    _used = double.parse(lis[2].toString()) / _storage;
+    print(_used);
+    _screenWindow.setState(() {});
     try {
-      Map tem = json.decode(lis[2]);
+      Map tem = json.decode(lis[3]);
       _dirs = tem[_username.toString()];
       _current = _dirs;
       if (_prev.isNotEmpty) {
@@ -63,7 +72,6 @@ void handler(List lis) {
         }
       }
       print("MetaData");
-      _screenWindow.setState(() {});
     } on FormatException {
       refreshList();
       print("Failed packet");
@@ -99,7 +107,8 @@ void handler(List lis) {
       ),
     );
   } else if (lis[0] == UPLOAD) {
-  } else if (lis[0] == DOWNLOAD) {}
+  } else if (lis[0] == DOWNLOAD) {
+  } else {}
 }
 
 //Supporters
@@ -122,105 +131,112 @@ void reset() {
 
 void fileName(context) {
   TextEditingController name = new TextEditingController();
-  AlertDialog dialog = new AlertDialog(
-    title: Center(
-        child: Text(
-      "Create new file",
-      style: TextStyle(color: Colors.white),
-    )),
-    actionsPadding: EdgeInsets.all(0),
-    contentPadding: EdgeInsets.all(0),
-    backgroundColor: Color.fromARGB(255, 22, 22, 22),
-    content: Container(
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: TextField(
-          controller: name,
-          style: TextStyle(color: Colors.white),
-          decoration: InputDecoration(
-            errorText: !_isIP ? "Invalid IP" : null,
-            border: OutlineInputBorder(
-                borderSide: BorderSide(
-              color: Colors.white,
-            )),
-            focusedBorder: OutlineInputBorder(
-                borderSide: BorderSide(
-              color: Colors.white,
-            )),
-            enabledBorder: OutlineInputBorder(
-                borderSide: BorderSide(
-              color: Colors.white,
-            )),
-            labelText: "File name",
-            focusColor: Colors.white,
-            labelStyle: TextStyle(color: Colors.white),
-          ),
-        ),
-      ),
-    ),
-    actions: [
-      ElevatedButton(
-          onPressed: () {
-            _sock.write(CREATE +
-                SEPARATOR +
-                FOLDER +
-                SEPARATOR +
-                _location.join("/") +
-                "/" +
-                name.text);
-            Navigator.of(context).pop();
-            refreshList();
-          },
-          child: Text("Create"))
-    ],
-  );
   showDialog(
       context: context,
       builder: (context) {
-        return dialog;
+        return new AlertDialog(
+          title: Center(
+              child: Text(
+            "Create new file",
+            style: TextStyle(color: TEXT),
+          )),
+          actionsPadding: EdgeInsets.all(0),
+          contentPadding: EdgeInsets.all(0),
+          backgroundColor: BACKGROUND,
+          content: Container(
+            child: Padding(
+              padding: const EdgeInsets.all(20.0),
+              child: TextField(
+                controller: name,
+                style: TextStyle(color: TEXT),
+                decoration: InputDecoration(
+                  errorText: !_isIP ? "Invalid IP" : null,
+                  border: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: BORDER,
+                  )),
+                  focusedBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: BORDER,
+                  )),
+                  enabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(
+                    color: BORDER,
+                  )),
+                  labelText: "File name",
+                  focusColor: BORDER,
+                  labelStyle: TextStyle(color: TEXT),
+                ),
+              ),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+                onPressed: () {
+                  _sock.write(CREATE +
+                      SEPARATOR +
+                      FOLDER +
+                      SEPARATOR +
+                      _location.join("/") +
+                      "/" +
+                      name.text);
+                  Navigator.of(context).pop();
+                  refreshList();
+                },
+                child: Text("Create"))
+          ],
+        );
       });
 }
 
-void delete(context, name, type) {
-  AlertDialog dialog = new AlertDialog(
-    title: Center(
-        child: Text(
-      "Confirmation",
-      style: TextStyle(color: Colors.white),
-    )),
-    actionsPadding: EdgeInsets.all(0),
-    contentPadding: EdgeInsets.all(0),
-    backgroundColor: Color.fromARGB(255, 22, 22, 22),
-    content: Padding(
-      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
-      child: Text(
-        'Do you want to delete "$name" ($type) ?',
-        style: TextStyle(color: Colors.white),
-      ),
-    ),
-    actions: [
-      Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20.0),
-        child: ElevatedButton(
-            onPressed: () {
-              _sock.write(DELETE +
-                  SEPARATOR +
-                  type +
-                  SEPARATOR +
-                  _location.join("/") +
-                  "/" +
-                  name);
-              Navigator.of(context).pop();
-              refreshList();
-            },
-            child: Text("Delete")),
-      )
-    ],
-  );
-  showDialog(
+Future<bool> delete(context, name, type) async {
+  return await showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return dialog;
+        return AlertDialog(
+          title: Center(
+              child: Text(
+            "Confirmation",
+            style: TextStyle(color: TEXT),
+          )),
+          actionsPadding: EdgeInsets.all(0),
+          contentPadding: EdgeInsets.all(0),
+          backgroundColor: BACKGROUND,
+          content: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+            child: Text(
+              'Do you want to delete "$name" ($type) ?',
+              style: TextStyle(color: TEXT),
+            ),
+          ),
+          actions: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: ElevatedButton(
+                  onPressed: () {
+                    _sock.write(DELETE +
+                        SEPARATOR +
+                        type +
+                        SEPARATOR +
+                        _location.join("/") +
+                        "/" +
+                        name);
+                    Navigator.of(context).pop(true);
+                    refreshList();
+                  },
+                  child: Text("Delete",style: TextStyle(color: BUTTON_TEXT),),style: loginButton,),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0),
+              child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.of(context).pop(false);
+                  },
+                  child: Text("Cancel",style: TextStyle(color: BUTTON_TEXT),),style: loginButton,),
+            )
+          ],
+        );
       });
 }
 
@@ -263,6 +279,8 @@ void connect(ip, port) async {
   }
 }
 
+void update(context) {}
+
 //Core
 void main() {
   runApp(MaterialApp(home: Login()));
@@ -293,7 +311,7 @@ class _LoginState extends State<Login> {
     return Scaffold(
       appBar: appBar(),
       body: Container(
-        color: Colors.black87,
+        color: BACKGROUND,
         height: double.infinity,
         child: Center(
           child: Padding(
@@ -310,39 +328,30 @@ class _LoginState extends State<Login> {
       shadowColor: Colors.white,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(25)),
       elevation: 5,
-      color: Color.fromARGB(255, 22, 22, 22),
+      color: WIDGETS,
       child: Container(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(30, 20, 30, 10),
+              padding: const EdgeInsets.fromLTRB(30, 40, 30, 10),
               child: TextField(
                 onTap: () {
                   _isIP = true;
                   setState(() {});
                 },
                 controller: _ipController,
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: INPUT_TEXT),
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   errorText: !_isIP ? "Invalid IP" : null,
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
+                  border: outlineInputBorder,
+                  focusedBorder: outlineInputBorder,
+                  enabledBorder: outlineInputBorder,
                   labelText: "IP Address",
-                  focusColor: Colors.white,
-                  labelStyle: TextStyle(color: Colors.white),
+                  focusColor: BORDER,
+                  labelStyle: TextStyle(color: TEXT),
                 ),
               ),
             ),
@@ -355,25 +364,16 @@ class _LoginState extends State<Login> {
                   setState(() {});
                 },
                 controller: _portController,
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: INPUT_TEXT),
                 keyboardType: TextInputType.number,
                 decoration: InputDecoration(
                   errorText: !_isPort ? "Invalid port" : null,
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
+                  border: outlineInputBorder,
+                  focusedBorder: outlineInputBorder,
+                  enabledBorder: outlineInputBorder,
                   labelText: "Port",
-                  focusColor: Colors.white,
-                  labelStyle: TextStyle(color: Colors.white),
+                  focusColor: BORDER,
+                  labelStyle: TextStyle(color: TEXT),
                 ),
               ),
             ),
@@ -386,25 +386,18 @@ class _LoginState extends State<Login> {
                   _isUsername = true;
                   setState(() {});
                 },
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: INPUT_TEXT),
                 keyboardType: TextInputType.text,
                 decoration: InputDecoration(
                   errorText: !_isUsername ? "Invalid username" : null,
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
+                  border: outlineInputBorder,
+                  focusedBorder: outlineInputBorder,
+                  enabledBorder: outlineInputBorder,
                   labelText: "User Name",
-                  focusColor: Colors.white,
-                  labelStyle: TextStyle(color: Colors.white),
+                  focusColor: BORDER,
+                  labelStyle: TextStyle(
+                    color: TEXT,
+                  ),
                 ),
               ),
             ),
@@ -417,7 +410,7 @@ class _LoginState extends State<Login> {
                   setState(() {});
                 },
                 controller: _passwordController,
-                style: TextStyle(color: Colors.white),
+                style: TextStyle(color: INPUT_TEXT),
                 obscureText: _passVisibility,
                 decoration: InputDecoration(
                   errorText: !_isPassword ? "Invalid password" : null,
@@ -426,7 +419,7 @@ class _LoginState extends State<Login> {
                       (_passVisibility)
                           ? Icons.visibility
                           : Icons.visibility_off,
-                      color: Colors.white,
+                      color: ICONS,
                     ),
                     onPressed: () {
                       setState(() {
@@ -434,21 +427,12 @@ class _LoginState extends State<Login> {
                       });
                     },
                   ),
-                  border: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  focusedBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
-                  enabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(
-                    color: Colors.white,
-                  )),
+                  border: outlineInputBorder,
+                  focusedBorder: outlineInputBorder,
+                  enabledBorder: outlineInputBorder,
                   labelText: "Password",
-                  focusColor: Colors.white,
-                  labelStyle: TextStyle(color: Colors.white),
+                  focusColor: BORDER,
+                  labelStyle: TextStyle(color: TEXT),
                 ),
               ),
             ),
@@ -456,6 +440,7 @@ class _LoginState extends State<Login> {
               padding: const EdgeInsets.all(10.0),
               child: ElevatedButton(
                   onPressed: () {
+                    _realName = _usernameController.text;
                     if (!_ipRegex.hasMatch(_ipController.text)) {
                       _isIP = false;
                       setState(() {});
@@ -482,7 +467,8 @@ class _LoginState extends State<Login> {
                       setState(() {});
                     }
                   },
-                  child: Text("Take me in")),
+                  style: loginButton,
+                  child: Text("Login", style: TextStyle(color: BUTTON_TEXT))),
             )
           ],
         ),
@@ -493,9 +479,8 @@ class _LoginState extends State<Login> {
   AppBar appBar() {
     return AppBar(
       title: Text("Local FTP"),
-      backgroundColor: Color.fromARGB(255, 22, 22, 22),
-      shadowColor: Colors.white,
-      elevation: 5,
+      backgroundColor: APPBAR,
+      elevation: 0,
     );
   }
 }
@@ -519,102 +504,99 @@ class _FilesDisplayState extends State<FilesDisplay> {
     return Scaffold(
         appBar: appBar(context),
         body: Container(
-          color: Colors.black87,
-          child: RefreshIndicator(
-            onRefresh: () {
-              refreshList();
-              return Future.delayed(
-                Duration(seconds: 1),
-                () {
-                  lis = _current.keys.toList();
-                  setState(() {});
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Page Refreshed'),
-                    ),
-                  );
-                  setState(() {});
+          color: BACKGROUND,
+          child: ListView.builder(
+            itemCount: lis.length,
+            padding: EdgeInsets.fromLTRB(0, 2, 0, 0),
+            itemBuilder: (BuildContext context, int index) {
+              return Dismissible(
+                direction: DismissDirection.startToEnd,
+
+                dismissThresholds: {
+                  DismissDirection.startToEnd: 0.4,
                 },
+                background: Container(
+                  child: Icon(
+                    Icons.delete,
+                    color: Colors.red,
+                  ),
+                  alignment: Alignment.centerLeft,
+                  padding: EdgeInsets.all(10),
+                ),
+                confirmDismiss: (dir) {
+                  print(dir);
+                  return delete(
+                      context,
+                      lis[index],
+                      (_current[lis[index]].values.length != 0)
+                          ? FOLDER
+                          : FILE);
+                },
+                key: Key(lis[index]),
+                child: GestureDetector(
+                    child: Card(
+                      elevation: 5,
+                      shadowColor: Color.fromARGB(255, 2, 250, 196),
+                      color: WIDGETS,
+                      child: ListTile(
+                        title: Text(
+                          lis[index],
+                          maxLines: 1,
+                          style: TextStyle(
+                            color: TEXT,
+                          ),
+                        ),
+                        leading: (_current[lis[index]].values.length == 0)
+                            ? Icon(
+                                Icons.insert_drive_file_outlined,
+                                color: ICONS,
+                              )
+                            : Icon(
+                                Icons.folder_open_rounded,
+                                color: ICONS,
+                              ),
+                      ),
+                    ),
+                    onTap: () {
+                      if (_current[lis[index]].values.length != 0) {
+                        _prev.add(_current);
+                        _location.add(lis[index]);
+                        _current = _current[lis[index]];
+                        setState(() {});
+                      }
+                    }),
               );
             },
-            child: ListView.builder(
-              itemCount: lis.length,
-              itemBuilder: (BuildContext context, int index) {
-                return listViewTile(index);
-              },
-            ),
           ),
         ));
   }
 
-  GestureDetector listViewTile(int index) {
-    return GestureDetector(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(5.0, 2, 5, 0),
-        child: Card(
-          color: Color.fromARGB(255, 22, 22, 22),
-          child: ListTile(
-            title: Text(
-              lis[index],
-              maxLines: 1,
-              style: TextStyle(
-                color: Colors.white,
-              ),
-            ),
-            contentPadding: EdgeInsets.all(5),
-            leading: (_current[lis[index]].values.length == 0)
-                ? Icon(
-                    Icons.insert_drive_file_outlined,
-                    color: Colors.white,
-                  )
-                : Icon(
-                    Icons.folder_open_rounded,
-                    color: Colors.white,
-                  ),
-          ),
-        ),
-      ),
-      onTap: () {
-        if (_current[lis[index]].values.length != 0) {
-          _prev.add(_current);
-          _location.add(lis[index]);
-          _current = _current[lis[index]];
-          setState(() {});
-        }
-      },
-      onLongPress: () {
-        delete(context, lis[index],
-            (_current[lis[index]].values.length != 0) ? FOLDER : FILE);
-      },
-    );
-  }
-
   AppBar appBar(BuildContext context) {
     return AppBar(
-      title: Text("Local FTP"),
-      backgroundColor: Color.fromARGB(255, 22, 22, 22),
-      shadowColor: Colors.white,
+      title: Text(
+        "Local FTP",
+        style: TextStyle(color: TEXT),
+      ),
+      backgroundColor: APPBAR,
+      elevation: 0,
+      titleSpacing: 0,
       actions: [
         IconButton(
             onPressed: () {
               fileName(context);
               refreshList();
             },
-            icon: Icon(Icons.add)),
-        IconButton(
-            onPressed: () {
-              _sock.close();
-              _isConnected = false;
-              reset();
-              Navigator.pop(context);
-              Navigator.push(context, MaterialPageRoute(builder: (context) {
-                return Login();
-              }));
-            },
-            icon: Icon(Icons.logout)),
+            icon: Icon(
+              Icons.add,
+              color: ICONS,
+            )),
+        popupMenuButton()
       ],
       leading: IconButton(
-        icon: Icon(Icons.arrow_back_rounded),
+        icon: Icon(
+          Icons.arrow_back_rounded,
+          color: ICONS,
+        ),
         onPressed: () {
           if (_prev.isNotEmpty) {
             _current = _prev.removeLast();
@@ -623,7 +605,139 @@ class _FilesDisplayState extends State<FilesDisplay> {
           }
         },
       ),
-      elevation: 5,
+    );
+  }
+
+  PopupMenuButton<dynamic> popupMenuButton() {
+    return PopupMenuButton(
+      color: BACKGROUND,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+      itemBuilder: (context) {
+        return [
+          PopupMenuItem(
+              child: Column(
+            children: [
+              GestureDetector(
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.person,
+                        color: ICONS,
+                      ),
+                      Text(_realName),
+                    ],
+                  ),
+                ),
+                onTap: () {
+                },
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10.0),
+                child: LinearProgressIndicator(
+                    backgroundColor: PROGRESS_BACKGROUND,
+                    value: _used,
+                    color: (_used > 0.9) ? PROGRESS_A_LIMIT : PROGRESS_B_LIMIT),
+              ),
+              Text(
+                  "${(_used / (1024 * 1024 * 1024) * _storage).toStringAsFixed(2)}GB used out of ${_storage / (1024 * 1024 * 1024)} GB")
+            ],
+          )),
+          PopupMenuItem(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 5),
+                  child: GestureDetector(
+                    child: Row(children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Icon(
+                          Icons.upload,
+                          color: ICONS,
+                        ),
+                      ),
+                      Text(
+                        "Upload file",
+                      ),
+                    ]),
+                    onTap: () async {
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 5, 0, 5),
+                  child: GestureDetector(
+                    child: Row(children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Icon(
+                          Icons.sync,
+                          color: ICONS,
+                        ),
+                      ),
+                      Text(
+                        "Sync",
+                      ),
+                    ]),
+                    onTap: () {
+                      refreshList();
+                      lis = _current.keys.toList();
+                      setState(() {});
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Page Refreshed'),
+                        ),
+                      );
+                      setState(() {});
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 5, 0, 10),
+                  child: GestureDetector(
+                    child: Row(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Icon(
+                            Icons.logout,
+                            color: ICONS,
+                          ),
+                        ),
+                        Text(
+                          "Logout",
+                        ),
+                      ],
+                    ),
+                    onTap: () {
+                      _sock.close();
+                      _isConnected = false;
+                      reset();
+                      Navigator.pop(context);
+                      Navigator.push(context,
+                          MaterialPageRoute(builder: (context) {
+                        return Login();
+                      }));
+                    },
+                  ),
+                ),
+              ],
+            ),
+            padding: EdgeInsets.all(0),
+          ),
+        ];
+      },
+      icon: Icon(
+        Icons.menu,
+        color: ICONS,
+      ),
+      padding: EdgeInsets.all(0),
     );
   }
 }
