@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:core';
 import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:crypto/crypto.dart';
 import 'package:ftp/Constants.dart';
+import 'package:path_provider/path_provider.dart';
 import 'Network.dart';
 
 dynamic _username = "";
@@ -20,6 +22,9 @@ bool _isUsername = true;
 bool _isPassword = true;
 bool _isIP = true;
 bool _isPort = true;
+
+bool _sendingFile = false;
+dynamic _file;
 
 dynamic _sock;
 
@@ -36,6 +41,11 @@ dynamic _screenWindow;
 double _used = 0;
 
 //Network
+
+void send() async {
+  await _sock.write(_file.bytes);
+}
+
 void refreshList() {
   _sock.write(FETCH + SEPARATOR + METADATA);
 }
@@ -56,7 +66,6 @@ void handler(List lis) {
   } else if (lis[0] == METADATA) {
     _storage = double.parse(lis[1].toString());
     _used = double.parse(lis[2].toString()) / _storage;
-    print(_used);
     _screenWindow.setState(() {});
     try {
       Map tem = json.decode(lis[3]);
@@ -107,6 +116,10 @@ void handler(List lis) {
       ),
     );
   } else if (lis[0] == UPLOAD) {
+    if (lis[1] == ACKNOWLEDGE) {
+      send();
+      _sendingFile = false;
+    }
   } else if (lis[0] == DOWNLOAD) {
   } else {}
 }
@@ -214,26 +227,36 @@ Future<bool> delete(context, name, type) async {
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: ElevatedButton(
-                  onPressed: () {
-                    _sock.write(DELETE +
-                        SEPARATOR +
-                        type +
-                        SEPARATOR +
-                        _location.join("/") +
-                        "/" +
-                        name);
-                    Navigator.of(context).pop(true);
-                    refreshList();
-                  },
-                  child: Text("Delete",style: TextStyle(color: BUTTON_TEXT),),style: loginButton,),
+                onPressed: () {
+                  _sock.write(DELETE +
+                      SEPARATOR +
+                      type +
+                      SEPARATOR +
+                      _location.join("/") +
+                      "/" +
+                      name);
+                  Navigator.of(context).pop(true);
+                  refreshList();
+                },
+                child: Text(
+                  "Delete",
+                  style: TextStyle(color: BUTTON_TEXT),
+                ),
+                style: loginButton,
+              ),
             ),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20.0),
               child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(false);
-                  },
-                  child: Text("Cancel",style: TextStyle(color: BUTTON_TEXT),),style: loginButton,),
+                onPressed: () {
+                  Navigator.of(context).pop(false);
+                },
+                child: Text(
+                  "Cancel",
+                  style: TextStyle(color: BUTTON_TEXT),
+                ),
+                style: loginButton,
+              ),
             )
           ],
         );
@@ -270,7 +293,9 @@ void connect(ip, port) async {
         print(error);
         _sock.destroy();
         reset();
-        Navigator.pop(_context);
+        while (Navigator.canPop(_context)) {
+          Navigator.pop(_context);
+        }
         Navigator.push(_context, MaterialPageRoute(builder: (builder) {
           return Login();
         }));
@@ -279,7 +304,20 @@ void connect(ip, port) async {
   }
 }
 
-void update(context) {}
+Future<String> getFilePath() async {
+  Directory appDocumentsDirectory =
+      await getApplicationDocumentsDirectory(); // 1
+  String appDocumentsPath = appDocumentsDirectory.path; // 2
+  String filePath = '$appDocumentsPath/demoTextFile.txt'; // 3
+  return filePath;
+}
+
+void saveFile() async {
+  var va = getFilePath();
+  File file = File(await va); // 1
+  file.writeAsString(
+      "This is my demo text that will be saved to : demoTextFile.txt"); // 2
+}
 
 //Core
 void main() {
@@ -510,27 +548,41 @@ class _FilesDisplayState extends State<FilesDisplay> {
             padding: EdgeInsets.fromLTRB(0, 2, 0, 0),
             itemBuilder: (BuildContext context, int index) {
               return Dismissible(
-                direction: DismissDirection.startToEnd,
-
                 dismissThresholds: {
                   DismissDirection.startToEnd: 0.4,
                 },
                 background: Container(
+                  color: Color.fromARGB(255, 255, 0, 38),
                   child: Icon(
                     Icons.delete,
-                    color: Colors.red,
+                    color: ICONS,
                   ),
                   alignment: Alignment.centerLeft,
                   padding: EdgeInsets.all(10),
                 ),
-                confirmDismiss: (dir) {
-                  print(dir);
-                  return delete(
-                      context,
-                      lis[index],
-                      (_current[lis[index]].values.length != 0)
-                          ? FOLDER
-                          : FILE);
+                secondaryBackground: Container(
+                  color: Color.fromARGB(255, 72, 255, 0),
+                  child: Icon(
+                    Icons.download_rounded,
+                    color: ICONS,
+                  ),
+                  alignment: Alignment.centerRight,
+                  padding: EdgeInsets.all(10),
+                ),
+                confirmDismiss: (dir)async {
+                  if(dir == DismissDirection.startToEnd)
+                    {
+                      return delete(
+                          context,
+                          lis[index],
+                          (_current[lis[index]].values.length != 0)
+                              ? FOLDER
+                              : FILE);
+                    }
+                  else {
+                    return false;
+                  }
+
                 },
                 key: Key(lis[index]),
                 child: GestureDetector(
@@ -617,21 +669,17 @@ class _FilesDisplayState extends State<FilesDisplay> {
           PopupMenuItem(
               child: Column(
             children: [
-              GestureDetector(
-                child: Center(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.person,
-                        color: ICONS,
-                      ),
-                      Text(_realName),
-                    ],
-                  ),
+              Center(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.person,
+                      color: ICONS,
+                    ),
+                    Text(_realName),
+                  ],
                 ),
-                onTap: () {
-                },
               ),
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 10.0),
@@ -641,96 +689,110 @@ class _FilesDisplayState extends State<FilesDisplay> {
                     color: (_used > 0.9) ? PROGRESS_A_LIMIT : PROGRESS_B_LIMIT),
               ),
               Text(
-                  "${(_used / (1024 * 1024 * 1024) * _storage).toStringAsFixed(2)}GB used out of ${_storage / (1024 * 1024 * 1024)} GB")
+                  "${(_used / (1024 * 1024 * 1024) * _storage).toStringAsFixed(2)}GB used out of ${_storage / (1024 * 1024 * 1024)} GB"),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 10, 0, 5),
+                child: GestureDetector(
+                  child: Row(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Icon(
+                        Icons.upload,
+                        color: ICONS,
+                      ),
+                    ),
+                    Text(
+                      "Upload file",
+                    ),
+                  ]),
+                  onTap: () async {
+                    FilePickerResult? result =
+                        await FilePicker.platform.pickFiles(withData: true);
+                    if (result != null) {
+                      PlatformFile file = result.files.first;
+                      if (_sendingFile == false) {
+                        _sock.write(UPLOAD +
+                            SEPARATOR +
+                            file.bytes.toString().length.toString() +
+                            SEPARATOR +
+                            _location.join("/") +
+                            "/" +
+                            file.name);
+                        _file = file;
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Already an upload is in progress'),
+                          ),
+                        );
+                      }
+                    } else {
+                      // User canceled the picker
+                    }
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 5, 0, 5),
+                child: GestureDetector(
+                  child: Row(children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      child: Icon(
+                        Icons.sync,
+                        color: ICONS,
+                      ),
+                    ),
+                    Text(
+                      "Sync",
+                    ),
+                  ]),
+                  onTap: () {
+                    refreshList();
+                    lis = _current.keys.toList();
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Page Refreshed'),
+                      ),
+                    );
+                    setState(() {});
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(0, 5, 0, 10),
+                child: GestureDetector(
+                  child: Row(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Icon(
+                          Icons.logout,
+                          color: ICONS,
+                        ),
+                      ),
+                      Text(
+                        "Logout",
+                      ),
+                    ],
+                  ),
+                  onTap: () {
+                    _sock.close();
+                    _isConnected = false;
+                    reset();
+                    Navigator.pop(context);
+                    Navigator.push(context,
+                        MaterialPageRoute(builder: (context) {
+                      return Login();
+                    }));
+                  },
+                ),
+              ),
             ],
           )),
-          PopupMenuItem(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 10, 0, 5),
-                  child: GestureDetector(
-                    child: Row(children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Icon(
-                          Icons.upload,
-                          color: ICONS,
-                        ),
-                      ),
-                      Text(
-                        "Upload file",
-                      ),
-                    ]),
-                    onTap: () async {
-                      Navigator.pop(context);
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 5, 0, 5),
-                  child: GestureDetector(
-                    child: Row(children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Icon(
-                          Icons.sync,
-                          color: ICONS,
-                        ),
-                      ),
-                      Text(
-                        "Sync",
-                      ),
-                    ]),
-                    onTap: () {
-                      refreshList();
-                      lis = _current.keys.toList();
-                      setState(() {});
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Page Refreshed'),
-                        ),
-                      );
-                      setState(() {});
-                      Navigator.pop(context);
-                    },
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(0, 5, 0, 10),
-                  child: GestureDetector(
-                    child: Row(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Icon(
-                            Icons.logout,
-                            color: ICONS,
-                          ),
-                        ),
-                        Text(
-                          "Logout",
-                        ),
-                      ],
-                    ),
-                    onTap: () {
-                      _sock.close();
-                      _isConnected = false;
-                      reset();
-                      Navigator.pop(context);
-                      Navigator.push(context,
-                          MaterialPageRoute(builder: (context) {
-                        return Login();
-                      }));
-                    },
-                  ),
-                ),
-              ],
-            ),
-            padding: EdgeInsets.all(0),
-          ),
         ];
       },
       icon: Icon(
